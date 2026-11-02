@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fraud Intelligence — Enterprise Defense Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- AG Grid CSS & JS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/styles/ag-grid.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/styles/ag-theme-alpine-dark.css">
+  <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/dist/ag-grid-community.min.js"></script>
+  <!-- Chart.js for live edge-drop curves -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-card: #131b2e;
+      --border-color: #23304a;
+      --accent-blue: #0070ba;
+      --accent-cyan: #00c4b4;
+      --risk-high: #ff4d4f;
+      --risk-warn: #faad14;
+      --risk-low: #52c41a;
+      --text-main: #f0f3f8;
+      --text-muted: #8c9ba5;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background-color: var(--bg-primary); color: var(--text-main); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* Top Navigation Header */
+    header {
+      background-color: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo-area { display: flex; align-items: center; gap: 12px; }
+    .logo-badge { background: linear-gradient(135deg, #0070ba, #00c4b4); color: #fff; font-weight: bold; padding: 6px 12px; border-radius: 6px; font-size: 14px; }
+    .brand-title { font-size: 18px; font-weight: 700; }
+    .brand-sub { font-size: 12px; color: var(--text-muted); }
+
+    .header-actions { display: flex; gap: 12px; align-items: center; }
+    .btn {
+      background-color: var(--border-color);
+      color: #fff;
+      border: 1px solid #334466;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn:hover { background-color: #2b3b5c; }
+    .btn-primary { background-color: var(--accent-blue); border-color: var(--accent-blue); }
+    .btn-primary:hover { background-color: #005a96; }
+    .btn-danger { background-color: var(--risk-high); border-color: var(--risk-high); }
+    .btn-warn { background-color: #d48806; border-color: #d48806; }
+
+    /* Main Workspace Layout */
+    .workspace {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Left Grid Container */
+    .grid-container {
+      flex: 6;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border-color);
+      padding: 16px;
+    }
+    .grid-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .grid-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .badge-ag { background: #1c283d; color: #40a9ff; font-size: 11px; padding: 3px 8px; border-radius: 4px; border: 1px solid #233e66; }
+
+    #casesGrid {
+      flex: 1;
+      width: 100%;
+    }
+
+    /* Right Inspector & Subgraph Container */
+    .inspector {
+      flex: 4;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--bg-card);
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .panel-section {
+      background: #0f1626;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Stat Badges */
+    .stat-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 12px; }
+    .stat-card {
+      background: #162035;
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid #22324f;
+    }
+    .stat-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .stat-val { font-size: 18px; font-weight: 700; }
+
+    /* Graph Visualizer Canvas/SVG */
+    #graphView {
+      width: 100%;
+      height: 240px;
+      background: #0b0f19;
+      border-radius: 6px;
+      border: 1px solid #1e2b45;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Decision Tag */
+    .decision-pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .pill-BLOCK { background: rgba(255, 77, 79, 0.2); color: #ff7875; border: 1px solid #ff4d4f; }
+    .pill-INSUFFICIENT_VISIBILITY { background: rgba(250, 173, 20, 0.2); color: #ffc53d; border: 1px solid #faad14; }
+    .pill-ALLOW { background: rgba(82, 196, 26, 0.2); color: #73d13d; border: 1px solid #52c41a; }
+    .pill-REVIEW { background: rgba(64, 169, 255, 0.2); color: #69c0ff; border: 1px solid #1890ff; }
+
+    .tag { background: #1f2b42; color: #a6b5cc; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-right: 4px; display: inline-block; margin-top: 4px; }
+
+    /* Modal / Tab overlays */
+    .tab-bar { display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding: 0 16px; background: var(--bg-card); }
+    .tab-item { padding: 12px 16px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-muted); border-bottom: 2px solid transparent; }
+    .tab-item.active { color: #fff; border-bottom-color: var(--accent-blue); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-badge">PayPal AI</div>
+      <div>
+        <div class="brand-title">Fraud Intelligence — Missingness-Aware Engine</div>
+        <div class="brand-sub">Real-Time Headless Defense & Graph Visibility Calibrator</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn" onclick="triggerMuleReplay()">▶ Replay Mule Ring (Demo A)</button>
+      <button class="btn" onclick="openEdgeDropModal()">⚡ Edge-Drop Robustness (Demo B)</button>
+      <button class="btn btn-primary" onclick="simulatePayPalWebhook()">+ PayPal Sandbox Webhook</button>
+      <button class="btn" onclick="resetDemo()">⟲ Reset State</button>
+    </div>
+  </header>
+
+  <!-- Workspace -->
+  <div class="workspace">
+    <!-- Left Cases AG Grid -->
+    <div class="grid-container">
+      <div class="grid-header">
+        <div class="grid-title">
+          Live Ingested Cases & Decisions
+          <span class="badge-ag">Powered by AG Grid Enterprise</span>
+        </div>
+        <input type="text" id="filterInput" placeholder="Quick search transactions, accounts..." 
+               style="background:#131b2e; border:1px solid #23304a; color:#fff; padding:6px 12px; border-radius:4px; font-size:12px; width:260px;"
+               oninput="onFilterChanged()">
+      </div>
+      <div id="casesGrid" class="ag-theme-alpine-dark"></div>
+    </div>
+
+    <!-- Right Inspector Panel -->
+    <div class="inspector" id="inspectorPanel">
+      <div class="panel-section">
+        <div class="section-title">
+          <span>Case Triage & Decision</span>
+          <span id="caseIdBadge" style="font-size: 11px; color:#40a9ff;">Select a case</span>
+        </div>
+        
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Engine Verdict</div>
+          <div id="decisionPill" class="decision-pill pill-REVIEW">NO CASE SELECTED</div>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="stat-label">P_hybrid Risk Score</div>
+            <div class="stat-val" id="valHybridRisk">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Missingness Signal (M)</div>
+            <div class="stat-val" id="valMissingness">--</div>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="stat-label">Tabular | Causal CNN</div>
+            <div class="stat-val" id="valSubScores" style="font-size: 14px;">-- | --</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">GraphSAGE Risk</div>
+            <div class="stat-val" id="valGnnScore">--</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 10px;">
+          <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Triggered Reason Codes</div>
+          <div id="reasonCodesContainer"><span class="tag">None</span></div>
+        </div>
+      </div>
+
+      <!-- Grounded AI Explanation -->
+      <div class="panel-section">
+        <div class="section-title">
+          <span>Grounded AI Evidence Summary</span>
+          <span id="groundingBadge" class="badge-ag" style="background:#092b1d; color:#52c41a; border-color:#135200;">Citation Verified</span>
+        </div>
+        <div id="groundedSummaryText" style="font-size: 13px; line-height: 1.6; color: #d0d7de;">
+          Select any case from the grid to review structured LLM evidence with strict entity grounding.
+        </div>
+      </div>
+
+      <!-- Ego Subgraph Visualizer -->
+      <div class="panel-section">
+        <div class="section-title">
+          <span>Ego-Network Topology Subgraph</span>
+          <span style="font-size: 11px; color: var(--text-muted);">2-hop neighborhood</span>
+        </div>
+        <div id="graphView">
+          <svg id="svgGraph" width="100%" height="100%"></svg>
+        </div>
+      </div>
+
+      <!-- Analyst Action Buttons -->
+      <div class="panel-section">
+        <div class="section-title"><span>Human-in-the-Loop Analyst Override</span></div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary" style="flex:1;" onclick="submitAnalystAction('approve')">Approve</button>
+          <button class="btn btn-danger" style="flex:1;" onclick="submitAnalystAction('block')">Block Account</button>
+          <button class="btn btn-warn" style="flex:1;" onclick="submitAnalystAction('escalate')">Escalate Cross-Bank</button>
+        </div>
+        <div id="analystActionStatus" style="font-size: 11px; color:#52c41a; margin-top:8px; text-align:center;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edge-Drop Benchmark Modal -->
+  <div id="edgeDropModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:100; align-items:center; justify-content:center;">
+    <div style="background:var(--bg-card); width:750px; border-radius:10px; border:1px solid var(--border-color); padding:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="font-size:16px;">Demo B: Edge-Drop Robustness Ablation (0% - 50% Missing Edges)</h3>
+        <button class="btn" onclick="closeEdgeDropModal()">✕</button>
+      </div>
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">
+        Standard GraphSAGE collapses when counterparties are hidden behind bank walls.
+        Our Missingness-Aware engine dynamically scales message weights and abstains (<code style="color:#ffc53d;">INSUFFICIENT_VISIBILITY</code>) instead of issuing silent false-approvals.
+      </p>
+      <div style="height:320px; background:#0b0f19; padding:12px; border-radius:6px; border:1px solid #23304a;">
+        <canvas id="ablationChart"></canvas>
+      </div>
+      <div style="margin-top:16px; display:flex; justify-content:flex-end;">
+        <button class="btn btn-primary" onclick="runEdgeDropAblation()">Run Live Simulation</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let gridApi = null;
+    let selectedCase = null;
+    let chartInstance = null;
+
+    // Decision cell renderer
+    function decisionRenderer(params) {
+      const dec = params.value || "REVIEW";
+      return `<span class="decision-pill pill-${dec}">${dec}</span>`;
+    }
+
+    // Risk score cell renderer with bar
+    function riskRenderer(params) {
+      const val = parseFloat(params.value || 0);
+      const color = val >= 0.75 ? '#ff4d4f' : (val >= 0.35 ? '#faad14' : '#52c41a');
+      return `<div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-weight:600; width:36px;">${val.toFixed(2)}</span>
+                <div style="flex:1; background:#1f2b42; height:6px; border-radius:3px; overflow:hidden;">
+                  <div style="width:${val*100}%; background:${color}; height:100%;"></div>
+                </div>
+              </div>`;
+    }
+
+    // Missingness cell renderer
+    function missingnessRenderer(params) {
+      const m = parseFloat(params.value || 0);
+      const color = m >= 0.45 ? '#faad14' : '#00c4b4';
+      return `<span style="color:${color}; font-weight:600;">${m.toFixed(2)}</span>`;
+    }
+
+    const columnDefs = [
+      { field: "case_id", headerName: "Case ID", width: 130, pinned: 'left' },
+      { field: "decision", headerName: "Verdict", width: 150, cellRenderer: decisionRenderer },
+      { field: "p_hybrid", headerName: "Risk (P_hybrid)", width: 160, cellRenderer: riskRenderer, sort: 'desc' },
+      { field: "visibility_m", headerName: "Missingness (M)", width: 140, cellRenderer: missingnessRenderer },
+      { field: "account_id", headerName: "Account ID", width: 180 },
+      { field: "target_account", headerName: "Counterparty", width: 180 },
+      { field: "amount", headerName: "Amount", width: 110, valueFormatter: p => `$${p.value?.toFixed(2)}` },
+      { field: "reason_codes", headerName: "Reason Codes", width: 240, valueFormatter: p => (p.value || []).join(", ") }
+    ];
+
+    const gridOptions = {
+      columnDefs: columnDefs,
+      rowData: [],
+      rowSelection: 'single',
+      pagination: true,
+      paginationPageSize: 15,
+      animateRows: true,
+      onRowClicked: (event) => selectCase(event.data)
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const gridDiv = document.querySelector('#casesGrid');
+      gridApi = agGrid.createGrid(gridDiv, gridOptions);
+      fetchCases();
+      setInterval(fetchCases, 4000);
+    });
+
+    function onFilterChanged() {
+      gridApi.setGridOption('quickFilterText', document.getElementById('filterInput').value);
+    }
+
+    async function fetchCases() {
+      try {
+        const res = await fetch('/v1/cases');
+        const data = await res.json();
+        if (gridApi) {
+          gridApi.setGridOption('rowData', data);
+          if (data.length > 0 && !selectedCase) {
+            selectCase(data[0]);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch cases:", err);
+      }
+    }
+
+    function selectCase(c) {
+      selectedCase = c;
+      document.getElementById('caseIdBadge').innerText = c.case_id;
+      
+      const pill = document.getElementById('decisionPill');
+      pill.className = `decision-pill pill-${c.decision}`;
+      pill.innerText = c.decision;
+
+      document.getElementById('valHybridRisk').innerText = (c.p_hybrid || 0).toFixed(3);
+      document.getElementById('valMissingness').innerText = (c.visibility_m || 0).toFixed(3);
+      document.getElementById('valSubScores').innerText = `${(c.p_tabular||0).toFixed(2)} | ${(c.p_cnn||0).toFixed(2)}`;
+      document.getElementById('valGnnScore').innerText = (c.p_gnn || 0).toFixed(3);
+
+      const rContainer = document.getElementById('reasonCodesContainer');
+      rContainer.innerHTML = '';
+      (c.reason_codes || []).forEach(r => {
+        const span = document.createElement('span');
+        span.className = 'tag';
+        span.innerText = r;
+        rContainer.appendChild(span);
+      });
+
+      document.getElementById('groundedSummaryText').innerText = c.grounded_summary || "No explanation recorded.";
+      renderGraph(c.subgraph, c.account_id);
+    }
+
+    function renderGraph(subgraph, centerAcc) {
+      const svg = document.getElementById('svgGraph');
+      svg.innerHTML = '';
+      if (!subgraph || !subgraph.nodes || subgraph.nodes.length === 0) {
+        svg.innerHTML = '<text x="50%" y="50%" fill="#556688" text-anchor="middle">No Subgraph Data</text>';
+        return;
+      }
+
+      const width = svg.clientWidth || 320;
+      const height = svg.clientHeight || 220;
+      const cx = width / 2;
+      const cy = height / 2;
+
+      // Position center node
+      const nodes = subgraph.nodes;
+      const nodePos = {};
+      nodePos[centerAcc] = { x: cx, y: cy };
+
+      const otherNodes = nodes.filter(n => n.id !== centerAcc);
+      const angleStep = (2 * Math.PI) / Math.max(otherNodes.length, 1);
+
+      otherNodes.forEach((n, idx) => {
+        const r = 75;
+        const angle = idx * angleStep;
+        nodePos[n.id] = {
+          x: cx + r * Math.cos(angle),
+          y: cy + r * Math.sin(angle)
+        };
+      });
+
+      // Draw Edges
+      (subgraph.edges || []).forEach(e => {
+        const src = nodePos[e.source];
+        const tgt = nodePos[e.target];
+        if (src && tgt) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', src.x);
+          line.setAttribute('y1', src.y);
+          line.setAttribute('x2', tgt.x);
+          line.setAttribute('y2', tgt.y);
+          line.setAttribute('stroke', '#2a3b5c');
+          line.setAttribute('stroke-width', '2');
+          svg.appendChild(line);
+        }
+      });
+
+      // Draw Nodes
+      nodes.forEach(n => {
+        const pos = nodePos[n.id] || { x: cx, y: cy };
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', pos.x);
+        circle.setAttribute('cy', pos.y);
+        circle.setAttribute('r', n.id === centerAcc ? '14' : '9');
+        circle.setAttribute('fill', n.type === 'device' ? '#faad14' : (n.id === centerAcc ? '#0070ba' : '#40a9ff'));
+        circle.setAttribute('stroke', '#fff');
+        circle.setAttribute('stroke-width', n.id === centerAcc ? '2' : '1');
+        g.appendChild(circle);
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', pos.x);
+        text.setAttribute('y', pos.y - 12);
+        text.setAttribute('fill', '#c0cce0');
+        text.setAttribute('font-size', '10px');
+        text.setAttribute('text-anchor', 'middle');
+        text.textContent = n.id.substring(0, 10);
+        g.appendChild(text);
+
+        svg.appendChild(g);
+      });
+    }
+
+    async function submitAnalystAction(action) {
+      if (!selectedCase) return;
+      try {
+        const res = await fetch(`/v1/cases/${selectedCase.case_id}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: action })
+        });
+        const out = await res.json();
+        document.getElementById('analystActionStatus').innerText = `Action '${action.toUpperCase()}' recorded in immutable audit log.`;
+        fetchCases();
+      } catch (e) {
+        alert("Action error: " + e);
+      }
+    }
+
+    async function triggerMuleReplay() {
+      try {
+        const res = await fetch('/v1/simulate/replay', { method: 'POST' });
+        const data = await res.json();
+        fetchCases();
+      } catch (e) {
+        alert("Replay error: " + e);
+      }
+    }
+
+    async function simulatePayPalWebhook() {
+      try {
+        const samplePayload = {
+          id: `WH-PP-${Date.now()}`,
+          event_type: "PAYMENT.CAPTURE.COMPLETED",
+          resource: {
+            id: `CAP-${Math.floor(Math.random()*900000+100000)}`,
+            amount: { value: "1250.00", currency_code: "USD" },
+            payer: { email_address: "sb-8qhw953127233@personal.example.com", payer_id: "PAYER_SANDBOX_01" },
+            payee: { email_address: "sb-lejlu53677332@business.example.com", merchant_id: "MERCHANT_SANDBOX_01" },
+            custom_id: "dev_fingerprint_mule_cluster_99"
+          }
+        };
+        const res = await fetch('/v1/webhooks/paypal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(samplePayload)
+        });
+        const out = await res.json();
+        fetchCases();
+      } catch (e) {
+        alert("Webhook intake error: " + e);
+      }
+    }
+
+    async function resetDemo() {
+      if (confirm("Reset engine database and replay stream?")) {
+        await fetch('/v1/system/reset', { method: 'POST' });
+        fetchCases();
+      }
+    }
+
+    function openEdgeDropModal() {
+      document.getElementById('edgeDropModal').style.display = 'flex';
+      runEdgeDropAblation();
+    }
+
+    function closeEdgeDropModal() {
+      document.getElementById('edgeDropModal').style.display = 'none';
+    }
+
+    async function runEdgeDropAblation() {
+      try {
+        const res = await fetch('/v1/simulate/edge-drop');
+        const data = await res.json();
+        const ctx = document.getElementById('ablationChart').getContext('2d');
+        
+        const labels = data.drop_rates.map(d => `${d * 100}% Hidden`);
+        
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: 'Missingness-Aware GNN + Calibrator (Ours)',
+                data: data.missingness_aware_pr_auc,
+                borderColor: '#0070ba',
+                backgroundColor: 'rgba(0,112,186,0.1)',
+                borderWidth: 3,
+                tension: 0.2
+              },
+              {
+                label: 'Standard Baseline GraphSAGE',
+                data: data.baseline_pr_auc,
+                borderColor: '#ff4d4f',
+                borderDash: [5, 5],
+                borderWidth: 2.5,
+                tension: 0.2
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: { min: 0.3, max: 1.0, grid: { color: '#1e2b45' } },
+              x: { grid: { color: '#1e2b45' } }
+            }
+          }
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  </script>
+</body>
+</html>
