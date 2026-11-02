@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Fraud Intelligence — Missingness-Aware Graph AI Engine
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -188,3 +189,6 @@ python -m cli.fraud_cli inspect case_0961ec11
 2. **Device Fingerprinting**: PayPal Sandbox APIs do not return proprietary device biometric fingerprints in standard test payloads; device hashes are injected via client-side headers or checkout metadata.
 3. **Latency Target**: Measured on standard laptop hardware (sync Layer 1: ~1–3ms; Layer 2 async: ~60–90ms).
 4. **Open Source**: Released under the [MIT License](LICENSE).
+=======
+# FraudIntelligence
+>>>>>>> ccfca1f9583123f48f8a129f108c1491cca57bdf
